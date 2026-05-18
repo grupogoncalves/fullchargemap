@@ -167,8 +167,8 @@
 
 <div id="passwordModal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
-        <h3>Acesso Restrito</h3>
-        <p>Digite a senha para remover o status de venda desta estação.</p>
+        <h3 id="modalTitle">Confirmação Requerida</h3>
+        <p id="modalDescription">Digite a senha da estação para prosseguir.</p>
         <input type="password" id="passwordInput" placeholder="Sua senha">
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
@@ -200,12 +200,12 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // URL DA API DO SEU GOOGLE APPS SCRIPT ATUALIZADA:
     const API_URL = "https://script.google.com/macros/s/AKfycbwnHSAXTEWayEi7JMOABZ-zCIhLnfPeghrvPgxX-Xaw-b55Qt32q3FgO0PLn-I6RYaA/exec";
     const iconUrl = "https://lh3.googleusercontent.com/d/1ywz6_yQYzvAhd3lMx3R4Q1UvniyBuBwx";
     let allStationsData = [];
     let mapMarkers = [];
     let currentStationIndex = null;
+    let targetStatusAction = ''; 
     
     const map = L.map('map').setView([-23.5505, -46.6333], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -221,10 +221,8 @@
         }
     }
 
-    // SOLUÇÃO INVIOLÁVEL: Envia os dados usando um truque de ping de imagem invisível (Ignora o bloqueio de CORS)
     function saveStatusToSheet(stationName, newStatus) {
         const urlComDados = API_URL + "?action=updateStatus&name=" + encodeURIComponent(stationName) + "&status=" + encodeURIComponent(newStatus);
-        
         const ping = new Image();
         ping.src = urlComDados;
         console.log("Comando enviado via ping: Estação '" + stationName + "' -> '" + newStatus + "'");
@@ -235,24 +233,29 @@
 
         const s = allStationsData[index];
         const statusValue = (s.status || s.Status || s.situacao || s.Situacao || s.venda || "").toString().toLowerCase();
-        const isVendida = statusValue.includes('vendid');
+        const isCurrentlyVendida = statusValue.includes('vendid');
 
-        if (isVendida) {
-            currentStationIndex = index;
-            document.getElementById('passwordInput').value = '';
-            document.getElementById('passwordModal').style.display = 'flex';
-            document.getElementById('passwordInput').focus();
+        currentStationIndex = index;
+        document.getElementById('passwordInput').value = '';
+        
+        if (isCurrentlyVendida) {
+            targetStatusAction = ''; 
+            document.getElementById('modalTitle').innerText = "Remover Venda";
+            document.getElementById('modalDescription').innerText = `Digite a senha para deixar "${s.name}" como Disponível.`;
         } else {
-            s.status = 'Vendida';
-            updateUI(allStationsData);
-            filterStations(); 
-            saveStatusToSheet(s.name, 'Vendida'); 
+            targetStatusAction = 'Vendida'; 
+            document.getElementById('modalTitle').innerText = "Confirmar Venda";
+            document.getElementById('modalDescription').innerText = `Digite a senha para marcar "${s.name}" como Vendida.`;
         }
+        
+        document.getElementById('passwordModal').style.display = 'flex';
+        document.getElementById('passwordInput').focus();
     }
 
     function closeModal() {
         document.getElementById('passwordModal').style.display = 'none';
         currentStationIndex = null;
+        targetStatusAction = '';
     }
 
     function confirmPassword() {
@@ -260,17 +263,26 @@
 
         const senhaDigitada = document.getElementById('passwordInput').value;
         const s = allStationsData[currentStationIndex];
-        const senhaCorreta = (s.senha || s.Senha || "").toString().trim();
+        
+        // 🔑 LÓGICA DE DUAS COLUNAS DE SENHA DISTINTAS
+        let senhaCorreta = "";
+        if (targetStatusAction === 'Vendida') {
+            // Para colocar a marcação, valida contra a coluna "senha incluir"
+            senhaCorreta = (s["senha incluir"] || s["Senha Incluir"] || s.senha_incluir || "").toString().trim();
+        } else {
+            // Para tirar a marcação, valida contra a coluna tradicional "senha"
+            senhaCorreta = (s.senha || s.Senha || "").toString().trim();
+        }
 
         if (senhaDigitada !== senhaCorreta) {
-            alert("Senha incorreta! Não é possível alterar o status.");
+            alert("Senha incorreta! Operação cancelada.");
             return;
         }
 
-        s.status = ''; 
+        s.status = targetStatusAction; 
         updateUI(allStationsData);
         filterStations();
-        saveStatusToSheet(s.name, ''); 
+        saveStatusToSheet(s.name, targetStatusAction); 
         closeModal();
     }
 
