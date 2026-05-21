@@ -133,7 +133,7 @@
         </div>
 
         <div id="stationList">
-            <div class="loading-msg">🔄 Sincronizando estações...</div>
+            <div class="loading-msg">🔄 Sincronizando mapa em tempo real...</div>
         </div>
         
         <div class="sidebar-footer">
@@ -177,8 +177,25 @@
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
+
 <script>
-    const API_URL = "https://script.google.com/macros/s/AKfycbwnHSAXTEWayEi7JMOABZ-zCIhLnfPeghrvPgxX-Xaw-b55Qt32q3FgO0PLn-I6RYaA/exec";
+    // Configurações do seu Firebase Realtime Database
+    const firebaseConfig = {
+        apiKey: "AIzaSyDxjgpzMCz36d4g5q-WNnPONRT9sw99tUE",
+        authDomain: "estac-3a649.firebaseapp.com",
+        databaseURL: "https://estac-3a649-default-rtdb.firebaseio.com",
+        projectId: "estac-3a649",
+        storageBucket: "estac-3a649.firebasestorage.app",
+        messagingSenderId: "937644205362",
+        appId: "1:937644205362:web:4a109f2330eb826903e32b"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const rtdb = firebase.database();
+
     const iconUrl = "https://lh3.googleusercontent.com/d/1ywz6_yQYzvAhd3lMx3R4Q1UvniyBuBwx";
     let allStationsData = [];
     let mapMarkers = [];
@@ -189,25 +206,34 @@
     document.addEventListener("DOMContentLoaded", () => {
         map = L.map('map').setView([-23.5505, -46.6333], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        loadStations();
+        
+        // Puxa as informações em tempo real conectando no Firebase
+        loadStationsRealtime();
     });
 
-    async function loadStations() {
-        try {
-            const response = await fetch(API_URL);
-            allStationsData = await response.json();
+    function loadStationsRealtime() {
+        rtdb.ref('estacoes').on('value', (snapshot) => {
+            allStationsData = [];
+            const data = snapshot.val();
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    if (data[key]) {
+                        allStationsData.push({
+                            id: key,
+                            ...data[key]
+                        });
+                    }
+                });
+            }
+            
+            // Organização alfabética
+            allStationsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
             updateUI(allStationsData);
-        } catch (e) { 
-            console.error(e); 
-            document.getElementById('stationList').innerHTML = '<div class="loading-msg">Erro ao carregar dados.</div>';
-        }
-    }
-
-    function saveStatusToSheet(stationName, newStatus) {
-        const urlComDados = API_URL + "?action=updateStatus&name=" + encodeURIComponent(stationName) + "&status=" + encodeURIComponent(newStatus);
-        const ping = new Image();
-        ping.src = urlComDados;
-        console.log("Comando enviado via ping: Estação '" + stationName + "' -> '" + newStatus + "'");
+            filterStations();
+        }, (error) => {
+            console.error("Erro Firebase Realtime:", error);
+            document.getElementById('stationList').innerHTML = '<div class="loading-msg">Erro ao conectar em tempo real.</div>';
+        });
     }
 
     function toggleStatus(index, event) {
@@ -240,7 +266,7 @@
         targetStatusAction = '';
     }
 
-    function confirmPassword() {
+    async function confirmPassword() {
         if (currentStationIndex === null) return;
 
         const senhaDigitada = document.getElementById('passwordInput').value;
@@ -248,7 +274,7 @@
         
         let senhaCorreta = "";
         if (targetStatusAction === 'Vendida') {
-            senhaCorreta = (s["senha incluir"] || s["Senha Incluir"] || s.senha_incluir || "").toString().trim();
+            senhaCorreta = (s["senha incluir"] || s["Senha Incluir"] || s.senha_incluir || s.senha || "").toString().trim();
         } else {
             senhaCorreta = (s.senha || s.Senha || "").toString().trim();
         }
@@ -258,11 +284,17 @@
             return;
         }
 
-        s.status = targetStatusAction; 
-        updateUI(allStationsData);
-        filterStations();
-        saveStatusToSheet(s.name, targetStatusAction); 
-        closeModal();
+        try {
+            // Atualiza diretamente o campo no Firebase Realtime Database para sincronizar na hora
+            await rtdb.ref(`estacoes/${s.id}`).update({
+                status: targetStatusAction,
+                Status: targetStatusAction
+            });
+            closeModal();
+        } catch (error) {
+            alert("Erro ao gravar alteração. Verifique as regras de escrita do Firebase.");
+            console.error(error);
+        }
     }
 
     document.getElementById('passwordInput').addEventListener('keypress', function (e) {
@@ -280,15 +312,14 @@
         mapMarkers = [];
         
         stations.forEach((s, index) => {
-            const lat = parseFloat(s.lat);
-            const lng = parseFloat(s.lng);
+            const lat = parseFloat(s.lat || s.latitude || s.Lat || s.Latitude);
+            const lng = parseFloat(s.lng || s.longitude || s.Lng || s.Longitude);
             const valorPotencia = (s.potencia || s.Potencia || "").toString().trim();
 
             const statusValue = (s.status || s.Status || s.situacao || s.Situacao || s.venda || "").toString().toLowerCase();
             const isVendida = statusValue.includes('vendid');
 
             if(!isNaN(lat) && !isNaN(lng)) {
-                // Correção de concatenação segura da string para o Street View
                 const popupHTML = `
                     <div style="text-align:center; min-width:140px;">
                         <strong style="color:${isVendida ? 'var(--primary)' : 'var(--accent)'}; font-size:14px;">${s.name}</strong><br>
@@ -385,7 +416,7 @@
                     <td style="font-weight:700">${s.name}</td>
                     <td>${s.municipio || ''}</td>
                     <td><span class="potencia-tag-pdf">${s.potencia || s.Potencia || '-'}</span></td>
-                    <td style="font-family:monospace; font-size:11px">${s.lat}, ${s.lng}</td>
+                    <td style="font-family:monospace; font-size:11px">${s.lat || s.latitude || s.Lat || s.Latitude}, ${s.lng || s.longitude || s.Lng || s.Longitude}</td>
                 </tr>`;
         });
         const element = document.getElementById('pdf-template');
@@ -395,4 +426,4 @@
     }
 </script>
 </body>
-</html
+</html>
