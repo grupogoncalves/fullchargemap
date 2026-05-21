@@ -11,7 +11,8 @@
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-        :root { --primary: #00A86B; --accent: #007BFF; --bg: #F8FAFC; --white: #FFFFFF; --text: #1E293B; --border: #E2E8F0; }
+        /* ALTERADO: --accent agora é vermelho (#EF4444) em vez de azul */
+        :root { --primary: #00A86B; --accent: #EF4444; --bg: #F8FAFC; --white: #FFFFFF; --text: #1E293B; --border: #E2E8F0; }
         
         body, html { margin: 0; padding: 0; height: 100%; font-family: 'Inter', sans-serif; background: var(--bg); overflow: hidden; }
         #app-container { display: grid; grid-template-columns: 380px 1fr; height: 100vh; }
@@ -54,7 +55,8 @@
 
         .badge-status { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-top: 4px; display: inline-block; }
         .badge-vendida { background: #dcfce7; color: var(--primary); }
-        .badge-disponivel { background: #dbeafe; color: var(--accent); }
+        /* ALTERADO: Fundo do badge disponível mudou para um tom vermelho claro suave */
+        .badge-disponivel { background: #fee2e2; color: var(--accent); }
 
         .btn-cart { background: transparent; border: none; padding: 5px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
         .btn-cart:hover { transform: scale(1.15); }
@@ -182,7 +184,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-database-compat.js"></script>
 
 <script>
-    // Configurações do seu Firebase Realtime Database
     const firebaseConfig = {
         apiKey: "AIzaSyDxjgpzMCz36d4g5q-WNnPONRT9sw99tUE",
         authDomain: "estac-3a649.firebaseapp.com",
@@ -207,7 +208,6 @@
         map = L.map('map').setView([-23.5505, -46.6333], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
-        // Puxa as informações em tempo real conectando no Firebase
         loadStationsRealtime();
     });
 
@@ -226,7 +226,6 @@
                 });
             }
             
-            // Organização alfabética
             allStationsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
             updateUI(allStationsData);
             filterStations();
@@ -285,7 +284,6 @@
         }
 
         try {
-            // Atualiza diretamente o campo no Firebase Realtime Database para sincronizar na hora
             await rtdb.ref(`estacoes/${s.id}`).update({
                 status: targetStatusAction,
                 Status: targetStatusAction
@@ -320,12 +318,13 @@
             const isVendida = statusValue.includes('vendid');
 
             if(!isNaN(lat) && !isNaN(lng)) {
+                /* ALTERADO: Trocado o emoji de bolinha azul (🔵) para bolinha vermelha (🔴) no popup do mapa */
                 const popupHTML = `
                     <div style="text-align:center; min-width:140px;">
                         <strong style="color:${isVendida ? 'var(--primary)' : 'var(--accent)'}; font-size:14px;">${s.name}</strong><br>
                         ${valorPotencia ? `<small>Trafo: ${valorPotencia}</small><br>` : ''}
                         <span class="badge-status ${isVendida ? 'badge-vendida' : 'badge-disponivel'}">
-                            ${isVendida ? '🟢 Vendida' : '🔵 Disponível'}
+                            ${isVendida ? '🟢 Vendida' : '🔴 Disponível'}
                         </span><br><br>
                         <button class="btn-popup" style="background:${isVendida ? 'var(--primary)' : 'var(--accent)'};" onclick="openStreetViewPopup(${lat}, ${lng})">Ver Street View</button>
                     </div>`;
